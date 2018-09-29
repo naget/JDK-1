@@ -106,7 +106,7 @@ final class DualPivotQuicksort {
      */
     static void sort(int[] a, int left, int right,
                      int[] work, int workBase, int workLen) {
-        // Use Quicksort on small arrays
+        // 小数组直接使用快排，QUICKSORT_THRESHOLD是阈值
         if (right - left < QUICKSORT_THRESHOLD) {
             sort(a, left, right, true);
             return;
@@ -120,6 +120,7 @@ final class DualPivotQuicksort {
         int count = 0; run[0] = left;
 
         // Check if the array is nearly sorted
+        //数组较有序，则for循环结束之后采用归并排序，如果较无序，则采用快速排序，后边代码不再执行
         for (int k = left; k < right; run[count] = k) {
             if (a[k] < a[k + 1]) { // ascending
                 while (++k <= right && a[k - 1] <= a[k]);
@@ -156,6 +157,9 @@ final class DualPivotQuicksort {
         }
 
         // Determine alternation base for merge
+        //归并排序准备部分
+        //这里这个odd是为了指示a和b最开始应该谁指向原数组，谁指向辅助数组，
+        // 从而确保最终排好序的元素在元素组中
         byte odd = 0;
         for (int n = 1; (n <<= 1) < count; odd ^= 1);
 
@@ -180,6 +184,7 @@ final class DualPivotQuicksort {
         }
 
         // Merging
+        // 归并排序的主体部分
         for (int last; count > 1; count = last) {
             for (int k = (last = 0) + 2; k <= count; k += 2) {
                 int hi = run[k], mi = run[k - 1];
@@ -192,6 +197,7 @@ final class DualPivotQuicksort {
                 }
                 run[++last] = hi;
             }
+            //如果a中子序列个数是奇数，则最后一个没有完成配对归并的序列直接复制到b中
             if ((count & 1) != 0) {
                 for (int i = right, lo = run[count - 1]; --i >= lo;
                     b[i + bo] = a[i + ao]
@@ -214,6 +220,7 @@ final class DualPivotQuicksort {
     private static void sort(int[] a, int left, int right, boolean leftmost) {
         int length = right - left + 1;
 
+        // 对与长度小于INSERTION_SORT_THRESHOLD的数组采用插入排序
         // Use insertion sort on tiny arrays
         if (length < INSERTION_SORT_THRESHOLD) {
             if (leftmost) {
@@ -235,7 +242,7 @@ final class DualPivotQuicksort {
             } else {
                 /*
                  * Skip the longest ascending sequence.
-                 */
+                 * 跳过最长的上升序列，比如数组a内容为：1245986，进过这步之后a[left]的内容将成为9,即Left=4                 */
                 do {
                     if (left >= right) {
                         return;
@@ -249,23 +256,28 @@ final class DualPivotQuicksort {
                  * the more optimized algorithm, so called pair insertion
                  * sort, which is faster (in the context of Quicksort)
                  * than traditional implementation of insertion sort.
+                 * 双插入排序，每次完成两个元素的插入排序。
+                 * 开始我还一直再纠结：for循环第三个条件为什么是k=++left,这样a1和a2岂不是一个元素了嘛？
+                 * 仔细一看红了脸，害羞.jpf
                  */
                 for (int k = left; ++left <= right; k = ++left) {
                     int a1 = a[k], a2 = a[left];
-
+                    //保证a1>=a2
                     if (a1 < a2) {
                         a2 = a1; a1 = a[left];
                     }
+                    //将a1进行插入
                     while (a1 < a[--k]) {
                         a[k + 2] = a[k];
                     }
                     a[++k + 1] = a1;
-
+                    //将a2进行插入
                     while (a2 < a[--k]) {
                         a[k + 1] = a[k];
                     }
                     a[k + 1] = a2;
                 }
+                //如果元素个数为奇数，最后一个元素没有进行配对需要另外进行插入排序
                 int last = a[right];
 
                 while (last < a[--right]) {
@@ -275,8 +287,10 @@ final class DualPivotQuicksort {
             }
             return;
         }
+        //对与长度大于等于INSERTION_SORT_THRESHOLD的数组采用改进后的快速排序
 
         // Inexpensive approximation of length / 7
+        //算出来seventh大约就是length的七分之一，为啥不直接除以7？让我猜一下，应该是位运算性能要好一点
         int seventh = (length >> 3) + (length >> 6) + 1;
 
         /*
@@ -286,6 +300,8 @@ final class DualPivotQuicksort {
          * these elements was empirically determined to work well on
          * a wide variety of inputs.
          */
+
+        //选出五个点，并进行排序
         int e3 = (left + right) >>> 1; // The midpoint
         int e2 = e3 - seventh;
         int e1 = e2 - seventh;
@@ -395,18 +411,25 @@ final class DualPivotQuicksort {
             a[left]  = a[less  - 1]; a[less  - 1] = pivot1;
             a[right] = a[great + 1]; a[great + 1] = pivot2;
 
+            //此时两个轴切分出了三块元素区域，下面便是对这三个区域进行递归快排
+            //特殊的是对中间区域的处理，如果中间区域过大，会进行进一步的处理
+
             // Sort left and right parts recursively, excluding known pivots
+            //对左区域进行递归快排
             sort(a, left, less - 2, leftmost);
+            //对右区域进行递归快排
             sort(a, great + 2, right, false);
 
             /*
              * If center part is too large (comprises > 4/7 of the array),
              * swap internal pivot values to ends.
              */
+            //如果中间区域过大，进入if代码块（做的主要工作就是把与轴相等的元素换到两边，排除到快排范围之外）
             if (less < e1 && e5 < great) {
                 /*
                  * Skip elements, which are equal to pivot values.
                  */
+                //跳过与轴相等的元素
                 while (a[less] == pivot1) {
                     ++less;
                 }
@@ -467,15 +490,18 @@ final class DualPivotQuicksort {
                     }
                 }
             }
-
+            //中间区域递归快排
             // Sort center part recursively
             sort(a, less, great, false);
 
         } else { // Partitioning with one pivot
+            //如果排序开头我们选出的那五个位置的元素有相等的情况，则走这个else代码块
+            //三项切分快速排序，这个排序过程在上上篇公众号文中提到过
             /*
              * Use the third of the five sorted elements as pivot.
              * This value is inexpensive approximation of the median.
              */
+            //选取第三个元素为轴
             int pivot = a[e3];
 
             /*
