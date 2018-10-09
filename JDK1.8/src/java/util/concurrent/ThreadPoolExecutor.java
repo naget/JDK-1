@@ -320,8 +320,8 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
     /**
      * The main pool control state, ctl, is an atomic integer packing
      * two conceptual fields
-     *   workerCount, indicating the effective number of threads
-     *   runState,    indicating whether running, shutting down etc
+     *   workerCount, 此时有效线程数indicating the effective number of threads
+     *   runState,    线程池生命周期控制indicating whether running, shutting down etc
      *
      * In order to pack them into one int, we limit workerCount to
      * (2^29)-1 (about 500 million) threads rather than (2^31)-1 (2
@@ -339,7 +339,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * reported as the current size of the workers set.
      *
      * The runState provides the main lifecycle control, taking on values:
-     *
+     *   线程池生命周期：
      *   RUNNING:  Accept new tasks and process queued tasks
      *   SHUTDOWN: Don't accept new tasks, but process queued tasks
      *   STOP:     Don't accept new tasks, don't process queued tasks,
@@ -352,7 +352,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * The numerical order among these values matters, to allow
      * ordered comparisons. The runState monotonically increases over
      * time, but need not hit each state. The transitions are:
-     *
+     * 线程池生命周期转换
      * RUNNING -> SHUTDOWN
      *    On invocation of shutdown(), perhaps implicitly in finalize()
      * (RUNNING or SHUTDOWN) -> STOP
@@ -898,7 +898,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
             int rs = runStateOf(c);
 
             // Check if queue empty only if necessary.
-            if (rs >= SHUTDOWN &&
+            if (rs >= SHUTDOWN &&//监测线程池状态
                 ! (rs == SHUTDOWN &&
                    firstTask == null &&
                    ! workQueue.isEmpty()))
@@ -906,13 +906,15 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
 
             for (;;) {
                 int wc = workerCountOf(c);
+                //如果此时有效线程数已经超过bound(核心线程数或最大线程数)，返回false
                 if (wc >= CAPACITY ||
                     wc >= (core ? corePoolSize : maximumPoolSize))
                     return false;
                 if (compareAndIncrementWorkerCount(c))
+                    //CAS增加worker数量记录，成功则跳出循环
                     break retry;
-                c = ctl.get();  // Re-read ctl
-                if (runStateOf(c) != rs)
+                c = ctl.get();  // Re-read ctl准备重试
+                if (runStateOf(c) != rs)//如果线程池状态发送变化，从外循环重新开始（进行状态监测）
                     continue retry;
                 // else CAS failed due to workerCount change; retry inner loop
             }
@@ -1051,7 +1053,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
 
             int wc = workerCountOf(c);
 
-            // Are workers subject to culling?
+            // Are workers subject to culling?//判断线程是否需要回收
             boolean timed = allowCoreThreadTimeOut || wc > corePoolSize;
 
             if ((wc > maximumPoolSize || (timed && timedOut))
@@ -1256,12 +1258,12 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * @throws NullPointerException if {@code workQueue}
      *         or {@code handler} is null
      */
-    public ThreadPoolExecutor(int corePoolSize,
-                              int maximumPoolSize,
-                              long keepAliveTime,
-                              TimeUnit unit,
-                              BlockingQueue<Runnable> workQueue,
-                              RejectedExecutionHandler handler) {
+    public ThreadPoolExecutor(int corePoolSize,//核心线程数
+                              int maximumPoolSize,//最大线程数
+                              long keepAliveTime,//存活时间
+                              TimeUnit unit,//存活时间的单位（秒、毫秒等）
+                              BlockingQueue<Runnable> workQueue,//阻塞队列
+                              RejectedExecutionHandler handler) {//拒绝策略
         this(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue,
              Executors.defaultThreadFactory(), handler);
     }
@@ -1354,17 +1356,18 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
          */
         int c = ctl.get();
         if (workerCountOf(c) < corePoolSize) {
+            //如果此时线程数小于核心线程数，则增加线程处理任务
             if (addWorker(command, true))
-                return;
+                return;//增加成功，结束
             c = ctl.get();
-        }
+        }//线程数已经不小于核心线程数，进行入队
         if (isRunning(c) && workQueue.offer(command)) {
             int recheck = ctl.get();
-            if (! isRunning(recheck) && remove(command))
+            if (! isRunning(recheck) && remove(command))//如果线程池已不再运行，取出任务，执行拒绝策略
                 reject(command);
-            else if (workerCountOf(recheck) == 0)
+            else if (workerCountOf(recheck) == 0)//此刻没有线程，就增加一个线程
                 addWorker(null, false);
-        }
+        }//如果我们没能成功入队，那么久增加一个线程，如果失败；说明线程池已关闭或已饱和，执行拒绝策略
         else if (!addWorker(command, false))
             reject(command);
     }
